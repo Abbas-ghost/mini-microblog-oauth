@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Mini Microblog</title></head>
+  <body>
+    <h1>Mini Microblog</h1>
+
+    <form action="/create" method="post">
+      <textarea name="content" rows="4" cols="60" placeholder="Write something..."></textarea><br>
+      <button type="submit">Post</button>
+    </form>
+
+    <h2>Recent posts</h2>
+    <ul>
+      {% for p in posts %}
+        <li>
+          <div><strong>#{{ p.id }}</strong> — {{ p.created_at }}</div>
+          <!-- SAFE RENDER for now -->
+          <div>{{ p.content | safe }}</div>
+        </li>
+      {% else %}
+        <li>No posts yet.</li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
