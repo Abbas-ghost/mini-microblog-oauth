@@ -1,46 +1,24 @@
-\# Mini Microblog — XSS Demo (Flask + SQLite)
+﻿# Mini Microblog (OAuth)
 
+## Setup
+1) Create venv and install deps:
+   py -3 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
 
+2) Create `.env`:
+   FLASK_APP=app.py
+   FLASK_DEBUG=1
+   SECRET_KEY=change-me
+   OAUTH_CLIENT_ID=...        # GitHub
+   OAUTH_CLIENT_SECRET=...
+   OAUTH_AUTHORIZE_URL=https://github.com/login/oauth/authorize
+   OAUTH_TOKEN_URL=https://github.com/login/oauth/access_token
+   OAUTH_USERINFO_URL=https://api.github.com/user
 
-\## Setup
+3) Initialize DB:
+   python init_db.py
+   python migrate_add_user.py
 
-1\) Create venv and activate (Windows PowerShell):
-
-&nbsp;  - `py -3 -m venv .venv`
-
-&nbsp;  - `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
-
-&nbsp;  - `. .\\.venv\\Scripts\\Activate.ps1`
-
-2\) Install deps: `pip install -r requirements.txt`
-
-3\) Init DB (one time): `py init\_db.py`
-
-4\) Run: `py app.py` → open http://127.0.0.1:5000
-
-
-
-\## What it demonstrates
-
-\- Stored XSS (intentionally added earlier during demo) and fixes:
-
-&nbsp; - Safe templating (no `| safe` on untrusted data)
-
-&nbsp; - Input sanitization with `bleach` allow-list
-
-&nbsp; - Content Security Policy (CSP) header
-
-
-
-\## Files
-
-\- `app.py` — app routes, CSP, sanitization
-
-\- `templates/index.html` — form + post list
-
-\- `init\_db.py` — creates `app.db`
-
-\- `app.db` — SQLite database (created at runtime)
-
-
-
+## Run
+python app.py
