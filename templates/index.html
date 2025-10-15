@@ -15,16 +15,21 @@
   <p><a href="/login">Login with GitHub</a></p>
 {% endif %}
 
-    <form action="/create" method="post">
-      <textarea name="content" rows="4" cols="60" placeholder="Write something..."></textarea><br>
-      <button type="submit">Post</button>
-    </form>
+    {% if profile %}
+  <form action="/create" method="post">
+    <textarea name="content" rows="4" cols="60" placeholder="Write something..."></textarea><br>
+    <button type="submit">Post</button>
+  </form>
+{% else %}
+  <p>Please <a href="/login">log in</a> to post.</p>
+{% endif %}
+
 
     <h2>Recent posts</h2>
     <ul>
       {% for p in posts %}
         <li>
-          <div><strong>#{{ p.id }}</strong> — {{ p.created_at }}</div>
+          <div><strong>#{{ p.id }}</strong> — {{ p.created_at }}{% if p.author_name %} — by {{ p.author_name }}{% endif %}</div>
           <!-- SAFE RENDER for now -->
           <div>{{ p.content | safe }}</div>
         </li>

@@ -5,7 +5,6 @@ import sqlite3, datetime
 import bleach
 from authlib.integrations.flask_client import OAuth
 
-
 # Load environment variables from .env
 load_dotenv()
 
@@ -19,10 +18,9 @@ oauth.register(
     client_secret=os.getenv("OAUTH_CLIENT_SECRET"),
     authorize_url=os.getenv("OAUTH_AUTHORIZE_URL"),
     access_token_url=os.getenv("OAUTH_TOKEN_URL"),
-    client_kwargs={"scope": "read:user user:email openid profile email"}
+    client_kwargs={"scope": "read:user user:email openid profile email"},
 )
 USERINFO_URL = os.getenv("OAUTH_USERINFO_URL")
-
 
 # ---- DB helper ----
 def get_db():
@@ -30,12 +28,27 @@ def get_db():
     con.row_factory = sqlite3.Row
     return con
 
+def current_user_id():
+    prof = session.get("profile")
+    if not prof:
+        return None
+    provider = "github"
+    provider_id = str(prof.get("id"))
+    con = get_db()
+    row = con.execute(
+        "SELECT id FROM users WHERE provider=? AND provider_id=?",
+        (provider, provider_id),
+    ).fetchone()
+    con.close()
+    return row["id"] if row else None
+
 # ---- Content Security Policy (defense-in-depth) ----
 @app.after_request
 def add_csp(resp):
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
+        "img-src 'self' https://avatars.githubusercontent.com data:; "
         "object-src 'none'; "
         "base-uri 'self'; "
         "frame-ancestors 'none'"
@@ -51,9 +64,12 @@ ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 @app.get("/")
 def index():
     con = get_db()
-    posts = con.execute(
-        "SELECT id, content, created_at FROM posts ORDER BY id DESC"
-    ).fetchall()
+    posts = con.execute("""
+        SELECT p.id, p.content, p.created_at, u.name AS author_name
+        FROM posts p
+        LEFT JOIN users u ON u.id = p.user_id
+        ORDER BY p.id DESC
+    """).fetchall()
     con.close()
     return render_template("index.html", posts=posts, profile=session.get("profile"))
 
@@ -70,10 +86,11 @@ def create():
         strip=True,
     )
     content = bleach.linkify(content, skip_tags=["code"])
+    uid = current_user_id()
     con = get_db()
     con.execute(
-        "INSERT INTO posts (content, created_at) VALUES (?, ?)",
-        (content, datetime.datetime.utcnow().isoformat()),
+        "INSERT INTO posts (content, created_at, user_id) VALUES (?, ?, ?)",
+        (content, datetime.datetime.utcnow().isoformat(), uid),
     )
     con.commit()
     con.close()
