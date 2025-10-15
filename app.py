@@ -11,6 +11,13 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev")
 
+# Cookie hardening
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",  # or "Strict" if you don’t need cross-site OAuth flows
+    SESSION_COOKIE_SECURE=False,    # set True in production behind HTTPS
+)
+
 oauth = OAuth(app)
 oauth.register(
     name="remote",  # e.g., GitHub/Google – endpoints come from .env
