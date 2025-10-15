@@ -1,8 +1,28 @@
-from flask import Flask, render_template, request, redirect, url_for
+import os
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3, datetime
 import bleach
+from authlib.integrations.flask_client import OAuth
+
+
+# Load environment variables from .env
+load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "dev")
+
+oauth = OAuth(app)
+oauth.register(
+    name="remote",  # e.g., GitHub/Google – endpoints come from .env
+    client_id=os.getenv("OAUTH_CLIENT_ID"),
+    client_secret=os.getenv("OAUTH_CLIENT_SECRET"),
+    authorize_url=os.getenv("OAUTH_AUTHORIZE_URL"),
+    access_token_url=os.getenv("OAUTH_TOKEN_URL"),
+    client_kwargs={"scope": "read:user user:email openid profile email"}
+)
+USERINFO_URL = os.getenv("OAUTH_USERINFO_URL")
+
 
 # ---- DB helper ----
 def get_db():
@@ -35,10 +55,12 @@ def index():
         "SELECT id, content, created_at FROM posts ORDER BY id DESC"
     ).fetchall()
     con.close()
-    return render_template("index.html", posts=posts)
+    return render_template("index.html", posts=posts, profile=session.get("profile"))
 
 @app.post("/create")
 def create():
+    if not session.get("profile"):
+        return redirect(url_for("login"))
     raw = request.form["content"]
     content = bleach.clean(
         raw,
@@ -57,6 +79,57 @@ def create():
     con.close()
     return redirect(url_for("index"))
 
+@app.get("/login")
+def login():
+    # Send the user to the OAuth provider’s consent page
+    redirect_uri = url_for("auth_callback", _external=True)
+    return oauth.remote.authorize_redirect(redirect_uri)
+
+@app.get("/auth/callback")
+def auth_callback():
+    # Exchange code for token
+    token = oauth.remote.authorize_access_token()
+
+    # Fetch the user profile from GitHub
+    resp = oauth.remote.get(USERINFO_URL)
+    profile = resp.json()
+
+    # --- persist user (upsert) ---
+    provider = "github"
+    provider_id = str(profile.get("id"))
+    email = profile.get("email")
+    name = profile.get("name") or profile.get("login")
+    avatar = profile.get("avatar_url")
+
+    con = get_db()
+    cur = con.cursor()
+    # ensure a row exists
+    cur.execute("""
+        INSERT OR IGNORE INTO users (provider, provider_id, email, name, avatar)
+        VALUES (?, ?, ?, ?, ?)
+    """, (provider, provider_id, email, name, avatar))
+    # update latest info
+    cur.execute("""
+        UPDATE users
+           SET email = COALESCE(?, email),
+               name = COALESCE(?, name),
+               avatar = COALESCE(?, avatar)
+         WHERE provider = ? AND provider_id = ?
+    """, (email, name, avatar, provider, provider_id))
+    con.commit()
+    con.close()
+
+    # Minimal session store
+    session["profile"] = profile
+    session["token"] = token
+
+    return redirect(url_for("index"))
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
 # for the earlier demo
 @app.get("/steal")
 def steal():
@@ -66,4 +139,3 @@ def steal():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-

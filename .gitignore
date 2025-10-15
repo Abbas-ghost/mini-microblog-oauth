@@ -12,3 +12,8 @@ app.db
 .DS_Store
 Thumbs.db
 .vscode/
+# Secrets
+.env
+
+# PyCharm
+.idea/
