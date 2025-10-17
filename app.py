@@ -7,6 +7,8 @@ from authlib.integrations.flask_client import OAuth
 import secrets
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+
 
 # Load environment variables from .env
 load_dotenv()
@@ -182,6 +184,7 @@ def auth_callback():
 @app.get("/logout")
 def logout():
     session.clear()
+    flash("You have been logged out.")
     return redirect(url_for("index"))
 
 # for the earlier demo
