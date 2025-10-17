@@ -17,6 +17,7 @@
 
     {% if profile %}
   <form action="/create" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <textarea name="content" rows="4" cols="60" placeholder="Write something..."></textarea><br>
     <button type="submit">Post</button>
   </form>

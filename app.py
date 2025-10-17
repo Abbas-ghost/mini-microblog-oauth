@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3, datetime
 import bleach
 from authlib.integrations.flask_client import OAuth
+import secrets
 
 # Load environment variables from .env
 load_dotenv()
@@ -67,6 +68,13 @@ ALLOWED_TAGS = ["b", "i", "em", "strong", "code", "br", "a"]
 ALLOWED_ATTRS = {"a": ["href", "title", "rel"]}
 ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
+def ensure_csrf():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
 # ---- Routes ----
 @app.get("/")
 def index():
@@ -78,12 +86,23 @@ def index():
         ORDER BY p.id DESC
     """).fetchall()
     con.close()
-    return render_template("index.html", posts=posts, profile=session.get("profile"))
+    return render_template(
+        "index.html",
+        posts=posts,
+        profile=session.get("profile"),
+        csrf_token=ensure_csrf(),   # pass CSRF token to template
+    )
 
 @app.post("/create")
 def create():
     if not session.get("profile"):
         return redirect(url_for("login"))
+
+    # CSRF check
+    form_token = request.form.get("csrf_token", "")
+    if form_token != session.get("csrf_token"):
+        return "Bad CSRF token", 400
+
     raw = request.form["content"]
     content = bleach.clean(
         raw,
@@ -111,12 +130,20 @@ def login():
 
 @app.get("/auth/callback")
 def auth_callback():
-    # Exchange code for token
-    token = oauth.remote.authorize_access_token()
+    try:
+        token = oauth.remote.authorize_access_token()
+    except Exception as e:
+        print("OAuth token exchange failed:", e)
+        return redirect(url_for("login"))
 
-    # Fetch the user profile from GitHub
-    resp = oauth.remote.get(USERINFO_URL)
-    profile = resp.json()
+    try:
+        resp = oauth.remote.get(USERINFO_URL)
+        profile = resp.json()
+        if not isinstance(profile, dict) or "id" not in profile:
+            raise ValueError("Bad userinfo response")
+    except Exception as e:
+        print("Fetching user profile failed:", e)
+        return redirect(url_for("login"))
 
     # --- persist user (upsert) ---
     provider = "github"
@@ -127,12 +154,10 @@ def auth_callback():
 
     con = get_db()
     cur = con.cursor()
-    # ensure a row exists
     cur.execute("""
         INSERT OR IGNORE INTO users (provider, provider_id, email, name, avatar)
         VALUES (?, ?, ?, ?, ?)
     """, (provider, provider_id, email, name, avatar))
-    # update latest info
     cur.execute("""
         UPDATE users
            SET email = COALESCE(?, email),
@@ -143,10 +168,8 @@ def auth_callback():
     con.commit()
     con.close()
 
-    # Minimal session store
     session["profile"] = profile
     session["token"] = token
-
     return redirect(url_for("index"))
 
 @app.get("/logout")
