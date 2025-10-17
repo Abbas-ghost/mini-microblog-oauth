@@ -5,6 +5,8 @@ import sqlite3, datetime
 import bleach
 from authlib.integrations.flask_client import OAuth
 import secrets
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 # Load environment variables from .env
 load_dotenv()
@@ -18,6 +20,9 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",  # or "Strict" if you don’t need cross-site OAuth flows
     SESSION_COOKIE_SECURE=False,    # set True in production behind HTTPS
 )
+
+# Rate limiting
+limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 
 oauth = OAuth(app)
 oauth.register(
@@ -122,12 +127,14 @@ def create():
     con.close()
     return redirect(url_for("index"))
 
+@limiter.limit("5 per minute")
 @app.get("/login")
 def login():
     # Send the user to the OAuth provider’s consent page
     redirect_uri = url_for("auth_callback", _external=True)
     return oauth.remote.authorize_redirect(redirect_uri)
 
+@limiter.limit("5 per minute")
 @app.get("/auth/callback")
 def auth_callback():
     try:
