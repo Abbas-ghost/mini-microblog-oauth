@@ -1,14 +1,14 @@
 import os
-from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session
-import sqlite3, datetime
-import bleach
-from authlib.integrations.flask_client import OAuth
+import sqlite3
+import datetime
 import secrets
+
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from authlib.integrations.flask_client import OAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-
+import bleach
 
 # Load environment variables from .env
 load_dotenv()
@@ -19,8 +19,8 @@ app.secret_key = os.getenv("SECRET_KEY", "dev")
 # Cookie hardening
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",  # or "Strict" if you don’t need cross-site OAuth flows
-    SESSION_COOKIE_SECURE=False,    # set True in production behind HTTPS
+    SESSION_COOKIE_SAMESITE="Lax",   # use "Strict" if you don’t need cross-site OAuth flows
+    SESSION_COOKIE_SECURE=False,     # set True in production behind HTTPS
 )
 
 # Rate limiting
@@ -70,6 +70,14 @@ def add_csp(resp):
     )
     return resp
 
+# ---- 429 handler (rate limit exceeded) ----
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    flash("Too many requests. Please wait a bit and try again.")
+    r = redirect(url_for("index"))
+    r.status_code = 429
+    return r
+
 # ---- Allowed HTML for sanitization ----
 ALLOWED_TAGS = ["b", "i", "em", "strong", "code", "br", "a"]
 ALLOWED_ATTRS = {"a": ["href", "title", "rel"]}
@@ -101,6 +109,7 @@ def index():
     )
 
 @app.post("/create")
+@limiter.limit("20 per minute")
 def create():
     if not session.get("profile"):
         return redirect(url_for("login"))
@@ -129,15 +138,15 @@ def create():
     con.close()
     return redirect(url_for("index"))
 
-@limiter.limit("5 per minute")
 @app.get("/login")
+@limiter.limit("5 per minute")
 def login():
     # Send the user to the OAuth provider’s consent page
     redirect_uri = url_for("auth_callback", _external=True)
     return oauth.remote.authorize_redirect(redirect_uri)
 
-@limiter.limit("5 per minute")
 @app.get("/auth/callback")
+@limiter.limit("10 per minute")
 def auth_callback():
     try:
         token = oauth.remote.authorize_access_token()
