@@ -132,7 +132,7 @@ def create():
     con = get_db()
     con.execute(
         "INSERT INTO posts (content, created_at, user_id) VALUES (?, ?, ?)",
-        (content, datetime.datetime.utcnow().isoformat(), uid),
+        (content, datetime.datetime.now(datetime.UTC).isoformat(), uid),
     )
     con.commit()
     con.close()
